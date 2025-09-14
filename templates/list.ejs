@@ -1,0 +1,89 @@
+<!DOCTYPE html>
+<html lang="<%= site.language || 'zh-CN' %>">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title><%= page.metadata.title || '文章列表' %> - <%= site.title %></title>
+    <meta name="description" content="<%= page.metadata.description || site.description %>">
+    <link rel="stylesheet" href="/css/style.css">
+</head>
+<body>
+    <header class="header">
+        <div class="container">
+            <h1 class="site-title">
+                <a href="/"><%= site.title %></a>
+            </h1>
+            
+            <nav class="navigation">
+                <% navigation.forEach(item => { %>
+                    <a href="<%= item.url %>" class="nav-link"><%= item.title %></a>
+                <% }) %>
+            </nav>
+        </div>
+    </header>
+
+    <main class="main">
+        <div class="container">
+            <div class="posts-list">
+                <h1 class="page-title"><%= page.metadata.title || '文章列表' %></h1>
+                
+                <% if (typeof posts !== 'undefined' && posts.length > 0) { %>
+                    <div class="posts">
+                        <% posts.forEach(post => { %>
+                            <article class="post-summary">
+                                <h2 class="post-summary-title">
+                                    <a href="<%= post.url %>"><%= post.metadata.title %></a>
+                                </h2>
+                                
+                                <div class="post-summary-meta">
+                                    <% if (post.metadata.date) { %>
+                                        <time datetime="<%= post.metadata.date %>">
+                                            <%= new Date(post.metadata.date).toLocaleDateString('zh-CN') %>
+                                        </time>
+                                    <% } %>
+                                    
+                                    <% if (post.metadata.excerpt) { %>
+                                        <p class="post-summary-excerpt"><%= post.metadata.excerpt %></p>
+                                    <% } %>
+                                </div>
+                            </article>
+                        <% }) %>
+                    </div>
+                    
+                    <% if (typeof pagination !== 'undefined' && pagination.totalPages > 1) { %>
+                        <nav class="pagination">
+                            <% if (pagination.currentPage > 1) { %>
+                                <a href="<%= pagination.previousUrl %>" class="pagination-link">上一页</a>
+                            <% } %>
+                            
+                            <span class="pagination-info">
+                                第 <%= pagination.currentPage %> 页 / 共 <%= pagination.totalPages %> 页
+                            </span>
+                            
+                            <% if (pagination.currentPage < pagination.totalPages) { %>
+                                <a href="<%= pagination.nextUrl %>" class="pagination-link">下一页</a>
+                            <% } %>
+                        </nav>
+                    <% } %>
+                <% } else { %>
+                    <p class="no-posts">暂无文章</p>
+                <% } %>
+            </div>
+        </div>
+    </main>
+
+    <footer class="footer">
+        <div class="container">
+            <p><%= custom.copyright || `© ${currentYear} ${site.author}` %></p>
+            
+            <div class="social-links">
+                <% social.forEach(link => { %>
+                    <a href="<%= link.url %>" target="_blank" rel="noopener" class="social-link">
+                        <%= link.name %>
+                    </a>
+                <% }) %>
+            </div>
+        </div>
+    </footer>
+</body>
+</html>

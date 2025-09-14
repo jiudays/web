@@ -1,0 +1,99 @@
+<!DOCTYPE html>
+<html lang="<%= site.language || 'zh-CN' %>">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title><%= page.metadata.title %> - <%= site.title %></title>
+    <meta name="description" content="<%= page.metadata.description || site.description %>">
+    <meta name="author" content="<%= site.author %>">
+    <meta name="keywords" content="<%= (page.metadata.keywords || site.keywords || []).join(',') %>">
+    <link rel="stylesheet" href="/css/style.css">
+    
+    <% if (custom.googleAnalytics) { %>
+    <script async src="https://www.googletagmanager.com/gtag/js?id=<%= custom.googleAnalytics %>"></script>
+    <script>
+        window.dataLayer = window.dataLayer || [];
+        function gtag(){dataLayer.push(arguments);}
+        gtag('js', new Date());
+        gtag('config', '<%= custom.googleAnalytics %>');
+    </script>
+    <% } %>
+</head>
+<body>
+    <header class="header">
+        <div class="container">
+            <h1 class="site-title">
+                <a href="/"><%= site.title %></a>
+            </h1>
+            
+            <nav class="navigation">
+                <% navigation.forEach(item => { %>
+                    <a href="<%= item.url %>" class="nav-link"><%= item.title %></a>
+                <% }) %>
+            </nav>
+        </div>
+    </header>
+
+    <main class="main">
+        <div class="container">
+            <article class="post">
+                <header class="post-header">
+                    <h1 class="post-title"><%= page.metadata.title %></h1>
+                    
+                    <div class="post-meta">
+                        <% if (page.metadata.date) { %>
+                            <time datetime="<%= page.metadata.date %>" class="post-date">
+                                📅 <%= new Date(page.metadata.date).toLocaleDateString('zh-CN') %>
+                            </time>
+                        <% } %>
+                        
+                        <% if (page.metadata.tags) { %>
+                            <div class="post-tags">
+                                <% page.metadata.tags.forEach(tag => { %>
+                                    <span class="tag">#<%= tag %></span>
+                                <% }) %>
+                            </div>
+                        <% } %>
+                    </div>
+                </header>
+
+                <div class="post-content">
+                    <%- page.content %>
+                </div>
+
+                <footer class="post-footer">
+                    <% if (custom.disqusShortname) { %>
+                        <div id="disqus_thread"></div>
+                        <script>
+                            var disqus_config = function () {
+                                this.page.url = '<%= site.baseUrl %><%= page.url %>';
+                                this.page.identifier = '<%= page.filename %>';
+                            };
+                            (function() {
+                                var d = document, s = d.createElement('script');
+                                s.src = 'https://<%= custom.disqusShortname %>.disqus.com/embed.js';
+                                s.setAttribute('data-timestamp', +new Date());
+                                (d.head || d.body).appendChild(s);
+                            })();
+                        </script>
+                    <% } %>
+                </footer>
+            </article>
+        </div>
+    </main>
+
+    <footer class="footer">
+        <div class="container">
+            <p><%= custom.copyright || `© ${currentYear} ${site.author}` %></p>
+            
+            <div class="social-links">
+                <% social.forEach(link => { %>
+                    <a href="<%= link.url %>" target="_blank" rel="noopener" class="social-link">
+                        <%= link.name %>
+                    </a>
+                <% }) %>
+            </div>
+        </div>
+    </footer>
+</body>
+</html>
