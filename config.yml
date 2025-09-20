@@ -1,89 +1,42 @@
-# 站点配置
 site:
-  title: "我的静态网站"
-  description: "使用 Node.js 静态网站生成器创建的网站"
+  title: "我的静态"
+  description: "欢迎来到我的个人网站，分享技术文章和心得体会"
   author: "您的名字"
   baseUrl: "http://localhost:3000"
   language: "zh-CN"
   keywords:
-    - "静态网站"
-    - "Node.js"
-    - "Markdown"
+    - "技术博客"
+    - "编程"
+    - "Web开发"
 
-# 路径配置
 paths:
   content: "./content"
   templates: "./templates"
   output: "./output"
   static: "./static"
-  config: "./config"
 
-# Markdown 配置
 markdown:
   breaks: true
   gfm: true
   headerIds: true
-  headerPrefix: ""
-  mangle: false
-  sanitize: false
-  smartLists: true
-  smartypants: true
-  xhtml: false
 
-# 服务器配置
 server:
   port: 3000
   open: true
   watch: true
-  logLevel: 2
-  wait: 1000
-  cors: true
 
-# 模板配置
-templates:
-  default: "base"
-  directory: "templates"
-  extension: ".ejs"
-
-# 导航菜单
-navigation:
-  - title: "首页"
-    url: "/"
-  - title: "关于"
-    url: "/about/"
-  - title: "博客"
-    url: "/blog/"
-
-# 社交媒体链接
-social:
-  - name: "GitHub"
-    url: "https://github.com/yourusername"
-    icon: "github"
-  - name: "Twitter"
-    url: "https://twitter.com/yourusername"
-    icon: "twitter"
-
-# 构建选项
 build:
   cleanOutput: true
   copyStatic: true
-  minifyHTML: false
   generateSitemap: true
-  generateRSS: false
+  generateHomepage: true
 
-# 分页配置
-pagination:
-  enabled: true
-  perPage: 10
-  layout: "list"
+features:
+  comments: true
+  search: false
+  darkMode: true
 
-# 代码高亮配置
-highlight:
-  theme: "github"
-  enabled: true
-
-# 自定义变量
 custom:
   googleAnalytics: "UA-XXXXX-Y"
   disqusShortname: "yourshortname"
-  copyright: ""
+  copyright: "© 2023 我的网站. 保留所有权利."

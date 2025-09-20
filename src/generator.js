@@ -2,9 +2,9 @@ const fs = require('fs');
 const path = require('path');
 const marked = require('marked');
 const ejs = require('ejs');
+const chokidar = require('chokidar');
 const config = require('./config');
 
-// 配置 marked
 marked.setOptions(config.markdown);
 
 class StaticSiteGenerator {
@@ -12,15 +12,16 @@ class StaticSiteGenerator {
     this.watchMode = process.argv.includes('--watch');
     this.serveMode = process.argv.includes('--serve');
     this.config = config;
+    this.allPosts = [];
     this.validatePaths();
   }
 
-  // 验证路径
   validatePaths() {
     const requiredPaths = ['content', 'templates', 'static', 'output'];
+    var self = this;
     
-    requiredPaths.forEach(pathType => {
-      const dirPath = this.config.paths[pathType];
+    requiredPaths.forEach(function(pathType) {
+      const dirPath = self.config.paths[pathType];
       if (!fs.existsSync(dirPath)) {
         console.log('Creating directory:', dirPath);
         fs.mkdirSync(dirPath, { recursive: true });
@@ -28,11 +29,111 @@ class StaticSiteGenerator {
     });
   }
 
-  // 解析 Markdown 文件
+  findMarkdownFiles(dir) {
+    let results = [];
+    const list = fs.readdirSync(dir);
+    var self = this;
+    
+    for (let i = 0; i < list.length; i++) {
+      const file = list[i];
+      const filePath = path.join(dir, file);
+      const stat = fs.statSync(filePath);
+      
+      if (stat.isDirectory()) {
+        results = results.concat(self.findMarkdownFiles(filePath));
+      } else if (file.endsWith('.md')) {
+        results.push(filePath);
+      }
+    }
+    
+    return results;
+  }
+
+  collectPostsInfo() {
+    const markdownFiles = this.findMarkdownFiles(this.config.paths.content);
+    this.allPosts = [];
+    var self = this;
+    
+    markdownFiles.forEach(function(filePath) {
+      if (path.basename(filePath) === 'index.md') return;
+      
+      const postData = self.parseMarkdownFile(filePath);
+      if (postData) {
+        self.allPosts.push({
+          title: postData.metadata.title,
+          date: new Date(postData.metadata.date),
+          formattedDate: self.formatDate(postData.metadata.date),
+          url: postData.url,
+          excerpt: self.generateExcerpt(postData.content),
+          tags: postData.metadata.tags || []
+        });
+      }
+    });
+    
+    this.allPosts.sort(function(a, b) {
+      return b.date - a.date;
+    });
+  }
+
+  formatDate(dateString) {
+    const date = new Date(dateString);
+    return date.toLocaleDateString('zh-CN', {
+      year: 'numeric',
+      month: 'long',
+      day: 'numeric'
+    });
+  }
+
+  generateExcerpt(content, length) {
+    if (length === void 0) { length = 150; }
+    const text = content.replace(/<[^>]*>/g, '');
+    return text.length > length ? text.substring(0, length) + '...' : text;
+  }
+
+  generateHomePage() {
+    try {
+      const templateName = 'home';
+      const templatePath = path.join(this.config.paths.templates, templateName + '.ejs');
+      
+      if (!fs.existsSync(templatePath)) {
+        this.generatePage(path.join(this.config.paths.content, 'index.md'));
+        return;
+      }
+      
+      const template = fs.readFileSync(templatePath, 'utf8');
+      var self = this;
+      
+      const htmlContent = ejs.render(template, {
+        site: self.config.site,
+        posts: self.allPosts,
+        totalPosts: self.allPosts.length,
+        navigation: self.config.navigation || [],
+        social: self.config.social || [],
+        currentYear: new Date().getFullYear(),
+        config: self.config,
+        custom: self.config.custom || {}
+      });
+      
+      const outputPath = path.join(this.config.paths.output, 'index.html');
+      const outputDir = path.dirname(outputPath);
+      
+      if (!fs.existsSync(outputDir)) {
+        fs.mkdirSync(outputDir, { recursive: true });
+      }
+      
+      fs.writeFileSync(outputPath, htmlContent);
+      console.log('Generated: index.html (homepage)');
+      
+    } catch (error) {
+      console.error('Homepage generation failed:', error.message);
+      this.generatePage(path.join(this.config.paths.content, 'index.md'));
+    }
+  }
+
   parseMarkdownFile(filePath) {
     try {
       const content = fs.readFileSync(filePath, 'utf8');
-      const filename = path.basename(filePath, '.md');
+      const relativePath = path.relative(this.config.paths.content, filePath);
       
       const frontMatterRegex = /^---\s*\n([\s\S]*?)\n---\s*\n([\s\S]*)$/;
       const match = content.match(frontMatterRegex);
@@ -50,7 +151,10 @@ class StaticSiteGenerator {
         }
       }
       
+      const filename = path.basename(filePath, '.md');
+      
       return {
+        filePath: filePath,
         filename: filename,
         metadata: {
           title: metadata.title || this.formatTitle(filename),
@@ -59,7 +163,7 @@ class StaticSiteGenerator {
           ...metadata
         },
         content: marked.parse(markdownContent),
-        url: this.generateUrl(filename)
+        url: this.generateUrl(filePath)
       };
     } catch (error) {
       console.error('Error reading file:', filePath, error.message);
@@ -67,7 +171,6 @@ class StaticSiteGenerator {
     }
   }
 
-  // 格式化标题
   formatTitle(filename) {
     return filename
       .split('-')
@@ -77,38 +180,52 @@ class StaticSiteGenerator {
       .join(' ');
   }
 
-  // 生成 URL
-  generateUrl(filename) {
-    if (filename === 'index') return '/';
-    return '/' + filename + '/';
+  generateUrl(filePath) {
+    const relativePath = path.relative(this.config.paths.content, filePath);
+    const withoutExt = relativePath.replace(/\.md$/, '');
+    
+    if (path.basename(withoutExt) === 'index') {
+      const dirPath = path.dirname(withoutExt);
+      return dirPath === '.' ? '/' : '/' + dirPath + '/';
+    }
+    
+    return '/' + withoutExt + '/';
   }
 
-  // 渲染模板
+  getOutputPath(filePath) {
+    const relativePath = path.relative(this.config.paths.content, filePath);
+    const withoutExt = relativePath.replace(/\.md$/, '');
+    
+    if (path.basename(withoutExt) === 'index') {
+      const dirPath = path.dirname(withoutExt);
+      return dirPath === '.' ? 'index.html' : path.join(dirPath, 'index.html');
+    }
+    
+    return path.join(withoutExt, 'index.html');
+  }
+
   renderTemplate(templateName, data) {
-    const templatePath = path.join(
-      this.config.paths.templates, 
-      templateName + '.ejs'
-    );
+    const templatePath = path.join(this.config.paths.templates, templateName + '.ejs');
     
     try {
       const template = fs.readFileSync(templatePath, 'utf8');
+      var self = this;
       
       return ejs.render(template, {
-        site: this.config.site,
+        site: self.config.site,
         page: data,
-        navigation: this.config.navigation || [],
-        social: this.config.social || [],
+        navigation: self.config.navigation || [],
+        social: self.config.social || [],
         currentYear: new Date().getFullYear(),
-        config: this.config,
-        custom: this.config.custom || {}
+        config: self.config,
+        custom: self.config.custom || {}
       });
     } catch (error) {
-      console.error('Render template failed (' + templateName + '):', error.message);
-      return '<h1>Template Render Error</h1><p>' + error.message + '</p>';
+      console.error('Render template failed:', error.message);
+      return '<h1>Template Error</h1><p>' + error.message + '</p>';
     }
   }
 
-  // 生成单个页面
   generatePage(markdownFile) {
     try {
       const pageData = this.parseMarkdownFile(markdownFile);
@@ -117,143 +234,181 @@ class StaticSiteGenerator {
       const templateName = pageData.metadata.layout;
       const htmlContent = this.renderTemplate(templateName, pageData);
       
-      const outputFilename = pageData.filename === 'index' ? 
-        'index.html' : pageData.filename + '/index.html';
-      
-      const outputPath = path.join(this.config.paths.output, outputFilename);
-      
-      // 确保目录存在
+      const outputPath = path.join(this.config.paths.output, this.getOutputPath(markdownFile));
       const outputDir = path.dirname(outputPath);
+      
       if (!fs.existsSync(outputDir)) {
         fs.mkdirSync(outputDir, { recursive: true });
       }
       
       fs.writeFileSync(outputPath, htmlContent);
-      console.log('Build Successful : ' + outputFilename);
+      console.log('Generated: ' + this.getOutputPath(markdownFile));
       
     } catch (error) {
-      console.error('Build Failed : (' + markdownFile + '):', error.message);
+      console.error('Build Failed:', error.message);
     }
   }
 
-  // 复制静态文件
   copyStaticFiles() {
     try {
       if (!fs.existsSync(this.config.paths.static)) {
-        console.log('Static directory does not exist, creating...');
         fs.mkdirSync(this.config.paths.static, { recursive: true });
         return;
       }
       
-      const copyItem = (src, dest) => {
-        if (fs.existsSync(src)) {
-          const stat = fs.statSync(src);
-          
-          if (stat.isDirectory()) {
-            if (!fs.existsSync(dest)) {
-              fs.mkdirSync(dest, { recursive: true });
-            }
-            
-            const items = fs.readdirSync(src);
-            for (let i = 0; i < items.length; i++) {
-              const item = items[i];
-              if (item !== '.git') {
-                copyItem(
-                  path.join(src, item),
-                  path.join(dest, item)
-                );
-              }
-            }
-          } else {
-            fs.copyFileSync(src, dest);
-          }
-        }
-      };
-      
-      copyItem(this.config.paths.static, this.config.paths.output);
-      console.log('Static files copied successfully');
+      this.copyRecursive(this.config.paths.static, this.config.paths.output);
+      console.log('Static files copied');
       
     } catch (error) {
       console.error('Error copying static files:', error.message);
     }
   }
 
-  // 清理输出目录
-  cleanOutput() {
-    try {
-      if (fs.existsSync(this.config.paths.output)) {
-        const items = fs.readdirSync(this.config.paths.output);
+  copyRecursive(src, dest) {
+    if (fs.existsSync(src)) {
+      const stat = fs.statSync(src);
+      
+      if (stat.isDirectory()) {
+        if (!fs.existsSync(dest)) {
+          fs.mkdirSync(dest, { recursive: true });
+        }
+        
+        const items = fs.readdirSync(src);
+        var self = this;
+        
         for (let i = 0; i < items.length; i++) {
           const item = items[i];
           if (item !== '.git') {
-            const itemPath = path.join(this.config.paths.output, item);
-            const stat = fs.statSync(itemPath);
-            
-            if (stat.isDirectory()) {
-              fs.rmSync(itemPath, { recursive: true, force: true });
-            } else {
-              fs.unlinkSync(itemPath);
-            }
+            self.copyRecursive(
+              path.join(src, item),
+              path.join(dest, item)
+            );
           }
         }
-        console.log('Clear Old Files Successful');
+      } else {
+        fs.copyFileSync(src, dest);
+      }
+    }
+  }
+
+  cleanOutput() {
+    try {
+      if (this.config.build.cleanOutput && fs.existsSync(this.config.paths.output)) {
+        this.cleanDirectory(this.config.paths.output);
+        console.log('Output directory cleaned');
       }
     } catch (error) {
       console.error('Error cleaning output:', error.message);
     }
   }
 
-  // 生成所有页面
+  cleanDirectory(dirPath) {
+    if (fs.existsSync(dirPath)) {
+      const items = fs.readdirSync(dirPath);
+      var self = this;
+      
+      for (let i = 0; i < items.length; i++) {
+        const item = items[i];
+        if (item !== '.git') {
+          const itemPath = path.join(dirPath, item);
+          const stat = fs.statSync(itemPath);
+          
+          if (stat.isDirectory()) {
+            self.cleanDirectory(itemPath);
+            fs.rmdirSync(itemPath);
+          } else {
+            fs.unlinkSync(itemPath);
+          }
+        }
+      }
+    }
+  }
+
   generateAllPages() {
     console.log('Building...');
     
     this.cleanOutput();
     
-    // 创建输出目录
     if (!fs.existsSync(this.config.paths.output)) {
       fs.mkdirSync(this.config.paths.output, { recursive: true });
     }
     
-    // 处理所有 Markdown 文件
-    try {
-      const files = fs.readdirSync(this.config.paths.content);
-      const markdownFiles = files.filter(file => file.endsWith('.md'));
-      
-      console.log('Found markdown files:', markdownFiles);
-      
-      for (let i = 0; i < markdownFiles.length; i++) {
-        this.generatePage(path.join(this.config.paths.content, markdownFiles[i]));
-      }
-      
-      // 复制静态文件
-      this.copyStaticFiles();
-      
-    } catch (error) {
-      console.error('Error reading content directory:', error.message);
+    this.collectPostsInfo();
+    
+    if (this.config.build.generateHomepage) {
+      this.generateHomePage();
     }
     
-    console.log('Build Successfully');
+    const markdownFiles = this.findMarkdownFiles(this.config.paths.content);
+    var self = this;
+    
+    for (let i = 0; i < markdownFiles.length; i++) {
+      const file = markdownFiles[i];
+      if (path.basename(file) === 'index.md' && this.config.build.generateHomepage) continue;
+      
+      self.generatePage(file);
+    }
+    
+    this.copyStaticFiles();
+    
+    console.log('Build completed! Total posts: ' + this.allPosts.length);
   }
 
-  // 运行方法
   run() {
     this.generateAllPages();
     
     if (this.watchMode) {
-      console.log('Watch mode is not implemented yet');
+      console.log('Watch mode enabled');
+      this.startWatching();
     }
     
     if (this.serveMode) {
-      console.log('Serve mode is not implemented yet');
+      console.log('Serve mode enabled');
+      this.startServer();
     }
+  }
+
+  startWatching() {
+    console.log('Watching for changes...');
+    var self = this;
+    
+    const watcher = chokidar.watch([
+      this.config.paths.content,
+      this.config.paths.templates,
+      this.config.paths.static,
+      path.join(this.config.paths.config, 'site.yml')
+    ], {
+      ignored: /(^|[\/\\])\../,
+      persistent: true
+    });
+    
+    watcher.on('change', function(filePath) {
+      console.log('File changed:', path.basename(filePath));
+      
+      if (filePath.endsWith('site.yml')) {
+        const ConfigLoader = require('./config');
+        self.config = ConfigLoader;
+        console.log('Config reloaded');
+      }
+      
+      self.generateAllPages();
+    });
+  }
+
+  startServer() {
+    const liveServer = require('live-server');
+    const params = {
+      port: this.config.server.port,
+      root: this.config.paths.output,
+      open: this.config.server.open,
+      wait: this.config.server.wait || 1000,
+      logLevel: this.config.server.logLevel || 2
+    };
+    
+    liveServer.start(params);
+    console.log('Server started: http://localhost:' + params.port);
   }
 }
 
-// 运行生成器
-try {
-  const generator = new StaticSiteGenerator();
-  generator.run();
-} catch (error) {
-  console.error('Fatal error:', error.message);
-  process.exit(1);
-}
+const generator = new StaticSiteGenerator();
+generator.run();

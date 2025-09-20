@@ -1,29 +1,23 @@
 {
-  "name": "EV",
+  "name": "my-static-generator",
   "version": "1.0.0",
   "description": "A simple static site generator built with Node.js",
   "main": "src/generator.js",
   "scripts": {
     "build": "node src/generator.js",
-    "serve": "live-server output --port=3000 --open",
-    "dev": "npm run build && npm run serve"
+    "serve": "live-server output --port=3000",
+    "watch": "node src/generator.js --watch",
+    "dev": "npm run build && npm run serve",
+    "start": "node src/generator.js --watch --serve"
   },
-  "keywords": [
-    "static",
-    "generator",
-    "markdown",
-    "blog"
-  ],
+  "keywords": ["static", "generator", "markdown", "blog"],
   "author": "Your Name",
   "license": "MIT",
   "dependencies": {
     "chokidar": "^3.5.3",
     "ejs": "^3.1.8",
     "js-yaml": "^4.1.0",
-    "live-server": "^1.2.2",
-    "marked": "^4.2.12"
-  },
-  "devDependencies": {
-    "nodemon": "^2.0.20"
+    "marked": "^4.2.12",
+    "live-server": "^1.2.2"
   }
 }
